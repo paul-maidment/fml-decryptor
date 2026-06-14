@@ -57,9 +57,10 @@ namespace FmlDecryptor
             {
                 uint csize = BitConverter.ToUInt32(fmlBytes, 128);
                 uint dsize = BitConverter.ToUInt32(fmlBytes, 132);
-                uint unknown = BitConverter.ToUInt32(fmlBytes, 136);
+                uint expectedCrc32 = BitConverter.ToUInt32(fmlBytes, 136);
                 uint nextHeaderOffset = BitConverter.ToUInt32(fmlBytes, 140);
                 int position = 144;
+                int chunkIndex = 0;
 
                 while (position < fmlBytes.Length - 4)
                 {
@@ -71,7 +72,13 @@ namespace FmlDecryptor
                     byte[] decompressed = ZlibDecompress(compressed);
 
                     int writeLen = decompressed.Length > dsize ? (int)dsize : decompressed.Length;
-                    output.Write(decompressed, 0, writeLen);
+                    byte[] chunkOutput = new byte[writeLen];
+                    Array.Copy(decompressed, chunkOutput, writeLen);
+                    output.Write(chunkOutput, 0, writeLen);
+
+                    uint actualCrc32 = ComputeChunkCrc32(chunkOutput);
+                    if (actualCrc32 != expectedCrc32)
+                        Console.Error.WriteLine($"WARNING: chunk {chunkIndex} CRC32 mismatch (expected 0x{expectedCrc32:X8}, computed 0x{actualCrc32:X8})");
 
                     position += (int)csize;
 
@@ -80,9 +87,10 @@ namespace FmlDecryptor
 
                     csize = BitConverter.ToUInt32(fmlBytes, position);
                     dsize = BitConverter.ToUInt32(fmlBytes, position + 4);
-                    unknown = BitConverter.ToUInt32(fmlBytes, position + 8);
+                    expectedCrc32 = BitConverter.ToUInt32(fmlBytes, position + 8);
                     nextHeaderOffset = BitConverter.ToUInt32(fmlBytes, position + 12);
                     position += 16;
+                    chunkIndex++;
                 }
 
                 return output.ToArray();
@@ -184,6 +192,18 @@ namespace FmlDecryptor
                 }
                 return output.ToArray();
             }
+        }
+
+        public static uint ComputeChunkCrc32(byte[] decompressedData)
+        {
+            uint crc = 0;
+            foreach (byte b in decompressedData)
+            {
+                crc ^= b;
+                for (int j = 0; j < 8; j++)
+                    crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320 : crc >> 1;
+            }
+            return crc;
         }
 
         private const string AltPassword = "b67de657";

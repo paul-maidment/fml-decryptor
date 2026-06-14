@@ -42,7 +42,7 @@ and byte-exact decode of all 4 sample files.
 [0..127]     header fields
 [128..131]   csize (compressed/encrypted size)
 [132..135]   dsize (decompressed size)
-[136..139]   unknown (possibly CRC32 or validation)
+[136..139]   chunk_crc32 (CRC32 of decompressed chunk data, init=0, no final XOR)
 [140..143]   next_header_offset (points to next chunk header, or last4 seed)
 [144..]      encrypted + zlib payload (csize bytes)
 [-4..]       last4 (password seed)
@@ -55,7 +55,7 @@ decompressing to a portion of the final output. The decoder processes all
 chunks and concatenates the results.
 
 ```
-chunk 1 header ─── embedded in file header [128..143]  (16 bytes: csize + dsize + unknown + next_header_offset)
+chunk 1 header ─── embedded in file header [128..143]  (16 bytes: csize + dsize + chunk_crc32 + next_header_offset)
 chunk 1 data   ── [144 .. 144+csize1-1]                 (encrypted zlib)
 chunk 2 header ── [144+csize1 .. +15]                   (16 bytes)
 chunk 2 data   ── [+16 .. +16+csize2-1]                 (encrypted zlib)
@@ -69,7 +69,7 @@ Each chunk header (16 bytes):
 ```
 [0..3]    csize (encrypted data size)
 [4..7]    dsize (decompressed data size)
-[8..11]   unknown (possibly CRC32 / validation)
+[8..11]   chunk_crc32 (CRC32 of decompressed chunk, init=0, no final XOR)
 [12..15]  next_header_offset (file offset of next chunk header)
 ```
 
