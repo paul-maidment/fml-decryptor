@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FML File Format &amp; Encryption Reference</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface2: #0f3460;
+    --accent: #e94560;
+    --text: #eee;
+    --text2: #aaa;
+    --code-bg: #0d1117;
+    --border: #2a2a4a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 0;
+  }
+  header {
+    background: linear-gradient(135deg, var(--surface2), var(--surface));
+    padding: 3rem 2rem;
+    text-align: center;
+    border-bottom: 3px solid var(--accent);
+  }
+  header h1 { font-size: 2.4rem; margin-bottom: 0.5rem; }
+  header p { color: var(--text2); font-size: 1.1rem; }
+  main { max-width: 1000px; margin: 0 auto; padding: 2rem; }
+  section { margin-bottom: 3rem; }
+  h2 {
+    font-size: 1.6rem;
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 0.3rem;
+    margin-bottom: 1rem;
+    color: #ff6b8a;
+  }
+  h3 { font-size: 1.2rem; margin: 1.2rem 0 0.6rem; color: #f0a0b0; }
+  h4 { font-size: 1rem; margin: 1rem 0 0.4rem; color: #d0d0d0; }
+  p { margin-bottom: 0.8rem; }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+  }
+  code {
+    font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+    background: var(--code-bg);
+    padding: 0.15em 0.4em;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+  pre code { background: none; padding: 0; }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    overflow-x: auto;
+    white-space: pre;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    line-height: 1.4;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface2);
+    font-weight: 600;
+  }
+  td { background: var(--surface); }
+  .pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin: 1.5rem 0;
+    font-family: monospace;
+    font-size: 0.9rem;
+  }
+  .pipeline .step {
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 0.5rem 0.8rem;
+    white-space: nowrap;
+  }
+  .pipeline .arrow { color: var(--accent); font-size: 1.2rem; }
+  .note {
+    background: #1a2a1a;
+    border-left: 4px solid #4caf50;
+    padding: 0.8rem 1rem;
+    border-radius: 0 6px 6px 0;
+    margin: 1rem 0;
+  }
+  .warn {
+    background: #2a1a1a;
+    border-left: 4px solid var(--accent);
+    padding: 0.8rem 1rem;
+    border-radius: 0 6px 6px 0;
+    margin: 1rem 0;
+  }
+  .byte-box {
+    display: inline-block;
+    border: 1px solid #555;
+    padding: 2px 6px;
+    margin: 2px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 0.8rem;
+    background: var(--code-bg);
+  }
+  .hl { color: #e94560; font-weight: bold; }
+  .hl2 { color: #f0c040; font-weight: bold; }
+  .hl3 { color: #50c878; font-weight: bold; }
+  @media (max-width: 768px) {
+    main { padding: 1rem; }
+    header { padding: 2rem 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>FML File Format &amp; Encryption</h1>
+  <p>Complete reference for the <code>.fml</code> container — structure, encryption pipeline, and algorithms</p>
+</header>
+
+<main>
+
+<!-- ================================================================== -->
+<section id="overview">
+  <h2>1. Overview</h2>
+  <p>
+    <strong>.fml</strong> files are encrypted, compressed data containers produced by the <em>MFME</em> application.
+    Each file contains one or more <strong>zlib-compressed</strong> data chunks, individually encrypted with a custom AES-based scheme.
+    The decryption password is not stored directly; instead, a 4-byte seed at the end of the file is passed through a reversible
+    <strong>Mixer</strong> function to derive an 8-character hex password.
+  </p>
+
+  <div class="pipeline">
+    <span class="step">last4 bytes</span>
+    <span class="arrow">→</span>
+    <span class="step">Mixer (100×)</span>
+    <span class="arrow">→</span>
+    <span class="step">8-char hex password</span>
+    <span class="arrow">→</span>
+    <span class="step">RIPEMD-128</span>
+    <span class="arrow">→</span>
+    <span class="step">16-byte AES key</span>
+    <span class="arrow">→</span>
+    <span class="step">IV (AES-ECB of 0xFF×16)</span>
+    <span class="arrow">→</span>
+    <span class="step">ECL Decrypt</span>
+    <span class="arrow">→</span>
+    <span class="step">zlib Decompress</span>
+    <span class="arrow">→</span>
+    <span class="step">Plaintext</span>
+  </div>
+
+  <div class="note">
+    <strong>Key insight:</strong> The entire security depends on the secrecy of the Mixer algorithm and the hardcoded
+    constant <code>0x00C59A00</code>. Given the 4-byte seed, the password is <em>fully deterministic</em>.
+    Two possible passwords are tried per file: the Mixer-derived one and a fallback <code>b67de657</code>.
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section id="file-structure">
+  <h2>2. File Structure</h2>
+
+  <h3>2.1 Single-Chunk Files</h3>
+  <p>Smaller <code>.fml</code> files contain exactly one payload chunk.</p>
+
+  <div class="diagram">
+<span class="hl2">Offset</span>        <span class="hl3">Size</span>   <span class="hl">Description</span>
+─────────────────────────────────────────────────────────
+0x00            128     Header &amp; metadata (mostly unused / padding)
+0x80              4     <span class="hl">csize</span> — compressed/encrypted data size (uint32 LE)
+0x84              4     <span class="hl">dsize</span> — decompressed data size (uint32 LE)
+0x88              8     Unknown / reserved (8 bytes)
+0x90            csize   Encrypted zlib payload
+-4                4     <span class="hl2">last4</span> — password seed (uint32 LE)
+  </div>
+
+  <h3>2.2 Multi-Chunk Files</h3>
+  <p>
+    Larger files are split into multiple independently-encrypted chunks.
+    Each chunk has its own 16-byte header and encrypted payload.
+    All chunks share the same AES key and IV; ECL mode <em>resets per chunk</em>.
+  </p>
+
+  <div class="diagram">
+<span class="hl2">Offset</span>        <span class="hl3">Size</span>   <span class="hl">Description</span>
+─────────────────────────────────────────────────────────
+0x00            128     File header
+0x80              4     Chunk 1 — csize
+0x84              4     Chunk 1 — dsize
+0x88              8     Chunk 1 — unknown
+0x90           csize₁   Chunk 1 — encrypted zlib payload
++csize₁           4     Chunk 2 — csize
++4                4     Chunk 2 — dsize
++8                8     Chunk 2 — unknown
++16            csize₂   Chunk 2 — encrypted zlib payload
+  ...            ...    ...
+-4                4     <span class="hl2">last4</span> — password seed
+  </div>
+
+  <h4>Chunk Header (16 bytes)</h4>
+  <table>
+    <tr><th>Offset</th><th>Size</th><th>Field</th><th>Type</th></tr>
+    <tr><td>+0</td><td>4</td><td><code>csize</code></td><td>uint32 LE — size of encrypted data in this chunk</td></tr>
+    <tr><td>+4</td><td>4</td><td><code>dsize</code></td><td>uint32 LE — size after zlib decompression</td></tr>
+    <tr><td>+8</td><td>8</td><td>unknown</td><td>8 reserved bytes</td></tr>
+  </table>
+</section>
+
+<!-- ================================================================== -->
+<section id="pipeline">
+  <h2>3. Decryption Pipeline (Step by Step)</h2>
+
+  <h3>3.1 Step 1 — Extract <code>last4</code></h3>
+  <p>
+    Read the final 4 bytes of the <code>.fml</code> file and interpret as a little-endian <code>uint32</code>.
+    This is the <strong>password seed</strong>.
+  </p>
+
+  <h3>3.2 Step 2 — Mixer: Derive Password</h3>
+  <p>
+    Run the <code>Mix()</code> function for <strong>100 iterations</strong> on the seed to produce the password.
+    The output is an 8-character lowercase hex string (e.g. <code>"01279247"</code>).
+  </p>
+
+  <pre><code>uint32 Mix(uint32 seed) {
+    const uint32 ADDR = 0x00C59A00;
+    uint32 v = seed;
+    for (int i = 0; i &lt; 100; i++) {
+        uint32 x = ADDR ^ v;                          // XOR with constant
+        uint32 v4 = (x &gt;&gt; 24) | (x &lt;&lt; 24) | (x &amp; 0x00FFFF00);  // byte swap end bytes
+        v = (v4 &lt;&lt; 3) | (v4 &gt;&gt; 29);                     // rotate left by 3
+    }
+    return v;
+}</code></pre>
+
+  <table>
+    <tr><th>Seed (last4)</th><th>Password (hex)</th></tr>
+    <tr><td><code>0x84EE4F7C</code></td><td><code>01279247</code></td></tr>
+    <tr><td><code>0x7EACD4E8</code></td><td><code>0098ffef</code></td></tr>
+    <tr><td><code>0x25CEAB82</code></td><td><code>276c4849</code></td></tr>
+    <tr><td><code>0x847971D9</code></td><td><code>5ac7da74</code></td></tr>
+  </table>
+
+  <p>The Mixer is <strong>reversible</strong> — running Mix on the password yields the seed and vice versa (100 iterations each way).</p>
+
+  <h3>3.3 Step 3 — RIPEMD-128: Derive AES Key</h3>
+  <p>
+    The 8-character ASCII password string is hashed with <strong>RIPEMD-128</strong> to produce a
+    <strong>16-byte AES key</strong>.
+  </p>
+
+  <pre><code>byte[] aesKey = Ripemd128.ComputeHash(Encoding.ASCII.GetBytes("01279247"));
+// → 0e751ef3533305c26ac67b1a39204ac8</code></pre>
+
+  <table>
+    <tr><th>Password</th><th>RIPEMD-128 Hash (AES Key)</th></tr>
+    <tr><td><code>01279247</code></td><td><code>0e751ef3533305c26ac67b1a39204ac8</code></td></tr>
+    <tr><td><code>0098ffef</code></td><td><code>d1f6109144b92b6ec44e8c4829e5ea9e</code></td></tr>
+    <tr><td><code>276c4849</code></td><td><code>00fa20bde36860aa74c63dbc2bdd0b78</code></td></tr>
+    <tr><td><code>5ac7da74</code></td><td><code>1b248a40f86bdc69effbe9bc5865fe96</code></td></tr>
+  </table>
+
+  <p>
+    RIPEMD-128 uses Merkle–Damgård construction with 64 rounds. Four 32-bit state words (h₀–h₃)
+    with parallel left/right lines that cross-feed into the final state. The algorithm pads
+    the input to a multiple of 64 bytes (512 bits), appending <code>0x80</code>, zero bytes,
+    and an 8-byte little-endian message length in bits.
+  </p>
+
+  <h3>3.4 Step 4 — Derive IV</h3>
+  <p>
+    Encrypt a <strong>16-byte block of all 0xFF</strong> with AES-128-ECB using the derived key.
+    The result is the 16-byte <strong>initialization vector</strong> for ECL mode.
+  </p>
+
+  <pre><code>byte[] iv = AES_ECB_Encrypt(aesKey, new byte[16] { 0xFF, 0xFF, ..., 0xFF });</code></pre>
+
+  <h3>3.5 Step 5 — ECL Decrypt (Custom Feedback Mode)</h3>
+  <p>
+    <strong>ECL</strong> is a custom AES-based stream/feedback mode designed for this format.
+    It operates similarly to a two-register CFB variant. For each 16-byte block:
+  </p>
+
+  <h4>Full blocks (16-byte aligned)</h4>
+  <ol>
+    <li>XOR the ciphertext block with the <em>current</em> feedback register <code>fb_d</code> → <code>fb_b</code></li>
+    <li>AES-ECB <strong>decrypt</strong> the original ciphertext block → <code>dec</code></li>
+    <li>XOR <code>dec</code> with <code>fb_d</code> → plaintext output</li>
+    <li><strong>Swap</strong> the feedback registers: <code>fb_d ↔ fb_b</code></li>
+  </ol>
+
+  <div class="diagram">
+  ┌──────────┐     ┌──────────┐     ┌──────────┐
+  │  fb_d[i]  │────▶│   XOR    │────▶│  fb_b[i]  │    (stored, not output)
+  └──────────┘     └──────────┘     └──────────┘
+                        ▲
+                        │ ct[block]
+                   ┌────┴─────┐
+                   │  AES-ECB │ ──▶ dec[block]
+                   │ DECRYPT  │
+                   └──────────┘
+                        │
+                   ┌────┴─────┐
+                   │   XOR    │ ◀── fb_d[i]
+                   └────┬─────┘
+                        │
+                        ▼
+                   plaintext[block]
+
+  After each block: SWAP(fb_d, fb_b)
+  </div>
+
+  <h4>Partial trailing block</h4>
+  <p>For leftover bytes (fewer than 16), AES-ECB <strong>encrypt</strong> <code>fb_d</code> to produce a keystream, then XOR that keystream with the remaining ciphertext.</p>
+
+  <h4>ECL encryption (forward direction)</h4>
+  <p>The encrypt direction works symmetrically:</p>
+  <ol>
+    <li>XOR plaintext block with <code>fb_d</code> → AES input</li>
+    <li>AES-ECB <strong>encrypt</strong> → ciphertext output</li>
+    <li>XOR ciphertext with <code>fb_d</code> → <code>fb_b</code></li>
+    <li>Swap <code>fb_d ↔ fb_b</code></li>
+  </ol>
+
+  <div class="warn">
+    <strong>Important:</strong> ECL state <em>resets</em> for each chunk. The IV is re-initialized to the same
+    <code>AES_ECB_Encrypt(key, 0xFF×16)</code> value at the start of every chunk. Multi-chunk files
+    are therefore decryptable independently of chunk order.
+  </div>
+
+  <h3>3.6 Step 6 — zlib Decompress</h3>
+  <p>
+    ECL output is raw <strong>zlib</strong> (RFC 1950) compressed data. Decompress with any standard
+    zlib implementation (DEFLATE, RFC 1951, wrapped in zlib header/trailer).
+  </p>
+
+  <h3>3.7 Step 7 — Trim &amp; Concatenate</h3>
+  <p>
+    Each chunk's decompressed output is trimmed to the exact <code>dsize</code> declared in
+    its header (in case decompression produces extra bytes). All chunk outputs are
+    concatenated in order to form the final plaintext.
+  </p>
+</section>
+
+<!-- ================================================================== -->
+<section id="ecl-details">
+  <h2>4. ECL Mode — Detailed Algorithm</h2>
+
+  <h4>Pseudocode: Decrypt</h4>
+  <pre><code>ECL_Decrypt(ciphertext, aesKey, iv):
+    fb_d = iv.copy()       // 16-byte feedback register D
+    fb_b = new byte[16]    // 16-byte feedback register B
+    result = new byte[ciphertext.Length]
+
+    for each 16-byte block in ciphertext (except last partial):
+        // Step 1: XOR ciphertext with fb_d → fb_b
+        fb_b[j] = ciphertext[i+j] XOR fb_d[j]
+
+        // Step 2: AES-ECB decrypt the ciphertext block
+        dec = AES_ECB_Decrypt(aesKey, ciphertext[i .. i+15])
+
+        // Step 3: XOR decrypted with fb_d → plaintext
+        result[i+j] = dec[j] XOR fb_d[j]
+
+        // Step 4: Swap feedback registers
+        swap(fb_d, fb_b)
+
+    // Handle partial trailing block (if any)
+    if ciphertext has remainder R &lt; 16:
+        keystream = AES_ECB_Encrypt(aesKey, fb_d)
+        for j in 0..R-1:
+            result[fullBlocks + j] = ciphertext[fullBlocks + j] XOR keystream[j]
+
+    return result</code></pre>
+
+  <h4>Pseudocode: Encrypt</h4>
+  <pre><code>ECL_Encrypt(plaintext, aesKey, iv):
+    fb_d = iv.copy()
+    fb_b = new byte[16]
+    result = new byte[plaintext.Length]
+
+    for each 16-byte block in plaintext (except last partial):
+        // Step 1: XOR plaintext with fb_d → AES input
+        block[j] = plaintext[i+j] XOR fb_d[j]
+
+        // Step 2: AES-ECB encrypt
+        ct[j] = AES_ECB_Encrypt(aesKey, block)[j]
+
+        // Step 3: Ciphertext is output
+        result[i+j] = ct[j]
+
+        // Step 4: fb_b = ct XOR fb_d
+        fb_b[j] = ct[j] XOR fb_d[j]
+
+        // Step 5: Swap
+        swap(fb_d, fb_b)
+
+    // Handle partial trailing block
+    if plaintext has remainder R &lt; 16:
+        keystream = AES_ECB_Encrypt(aesKey, fb_d)
+        for j in 0..R-1:
+            result[fullBlocks + j] = plaintext[fullBlocks + j] XOR keystream[j]
+
+    return result</code></pre>
+</section>
+
+<!-- ================================================================== -->
+<section id="algorithms">
+  <h2>5. Cryptographic Primitives</h2>
+
+  <h3>5.1 AES-128-ECB</h3>
+  <p>
+    Used in two roles:
+  </p>
+  <ul>
+    <li><strong>IV derivation:</strong> One-block encrypt of <code>0xFF × 16</code></li>
+    <li><strong>ECL core:</strong> One-block encrypt/decrypt per 16-byte segment</li>
+  </ul>
+  <p>No padding is used; all operations are on exactly 16-byte blocks.</p>
+
+  <h3>5.2 RIPEMD-128 Hash</h3>
+  <table>
+    <tr><th>Property</th><th>Value</th></tr>
+    <tr><td>Digest size</td><td>128 bits (16 bytes)</td></tr>
+    <tr><td>Block size</td><td>512 bits (64 bytes)</td></tr>
+    <tr><td>Rounds</td><td>64 (4 × 16 per parallel line)</td></tr>
+    <tr><td>Initial Vector</td><td><code>67452301 EFCDAB89 98BADCFE 10325476</code></td></tr>
+    <tr><td>Padding</td><td>Standard MD: append <code>0x80</code>, pad zeros to 448 mod 512 bits, append length</td></tr>
+    <tr><td>Endianness</td><td>Little-endian throughout</td></tr>
+    <tr><td>Round functions</td><td>F₁ = XOR, F₂ = (x&amp;y)|(~x&amp;z), F₃ = (x|~y)^z, F₄ = (x&amp;z)|(y&amp;~z)</td></tr>
+    <tr><td>Constants</td><td>Kₗ = {0, 5A827999, 6ED9EBA1, 8F1BBCDC}, Kᵣ = {50A28BE6, 5C4DD124, 6D703EF3, 0}</td></tr>
+  </table>
+
+  <h3>5.3 zlib (RFC 1950)</h3>
+  <p>
+    Standard DEFLATE-compressed data wrapped in a 2-byte zlib header (CMF + FLG) and a 4-byte Adler-32 trailer.
+    The first byte is typically <code>0x78</code> (deflate, 32K window).
+  </p>
+</section>
+
+<!-- ================================================================== -->
+<section id="constants">
+  <h2>6. Hardcoded Constants</h2>
+
+  <table>
+    <tr><th>Constant</th><th>Value</th><th>Usage</th></tr>
+    <tr><td><code>Mixer address</code></td><td><code>0x00C59A00</code></td><td>XOR operand in Mix()</td></tr>
+    <tr><td><code>Mixer iterations</code></td><td><code>100</code></td><td>Number of Mix() rounds to derive password from seed</td></tr>
+    <tr><td><code>All-FF block</code></td><td><code>0xFF × 16</code></td><td>Encrypted with AES-ECB to derive ECL IV</td></tr>
+    <tr><td><code>Alt password</code></td><td><code>"b67de657"</code></td><td>Fallback password tried if primary decryption fails</td></tr>
+    <tr><td><code>Header size</code></td><td><code>128 bytes</code></td><td>Fixed header before first chunk metadata</td></tr>
+    <tr><td><code>First chunk offset</code></td><td><code>144 (0x90)</code></td><td>Payload start = header(128) + chunk1-header(16)</td></tr>
+  </table>
+</section>
+
+<!-- ================================================================== -->
+<section id="format-summary">
+  <h2>7. Visual Format Summary</h2>
+
+  <div class="diagram">
+┌─────────────────────────────────────────────────────────────────────┐
+│                        .fml File Layout                              │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌──────────────────────────────┐                                    │
+│  │   Header (128 bytes)         │  Mostly unused / padding           │
+│  ├──────────────────────────────┤                                    │
+│  │ csize (4B) │ dsize (4B)     │  ─┐                                │
+│  ├────────────┴─────────────────┤   │                                │
+│  │ unknown (8 bytes)            │   ├─ Chunk 1 header (16 bytes)    │
+│  ├──────────────────────────────┤   │                                │
+│  │                              │  ─┘                                │
+│  │ Encrypted zlib payload      │  csize bytes                       │
+│  │ (Chunk 1)                   │  ─── ECL mode, AES-128-ECB         │
+│  │                              │                                    │
+│  ├──────────────────────────────┤  ─┐                                │
+│  │ csize (4B) │ dsize (4B)     │   │  (if multi-chunk)              │
+│  ├────────────┴─────────────────┤   ├─ Chunk 2 header               │
+│  │ unknown (8 bytes)           │   │                                │
+│  ├──────────────────────────────┤  ─┘                                │
+│  │                              │                                    │
+│  │ Encrypted zlib payload      │  csize bytes                       │
+│  │ (Chunk 2)                   │                                    │
+│  │                              │                                    │
+│  ├──────────────────────────────┤                                    │
+│  │          ... more chunks ... │                                    │
+│  │                              │                                    │
+│  ├──────────────────────────────┤                                    │
+│  │ last4 (4 bytes)              │  Password seed (uint32 LE)        │
+│  └──────────────────────────────┘                                    │
+│                                                                      │
+│  Output = zlib_decompress(chunk1) || zlib_decompress(chunk2) || ...  │
+└─────────────────────────────────────────────────────────────────────┘
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section id="implementation">
+  <h2>8. Implementation Notes</h2>
+
+  <h4>Decryption flow in C#</h4>
+  <pre><code>// 1. Read the .fml file
+byte[] fml = File.ReadAllBytes("sample.fml");
+
+// 2. Extract seed (last 4 bytes)
+uint seed = BitConverter.ToUInt32(fml, fml.Length - 4);
+
+// 3. Derive password via Mixer (100 iterations)
+uint passwordNum = Mix(seed);
+string password = passwordNum.ToString("x8");  // 8-char hex
+
+// 4. Hash password → AES key
+byte[] aesKey = Ripemd128.ComputeHash(Encoding.ASCII.GetBytes(password));
+
+// 5. Derive IV
+byte[] iv = AES_ECB_Encrypt(aesKey, new byte[16] { 0xFF, ..., 0xFF });
+
+// 6. For each chunk: ECL decrypt → zlib decompress → trim to dsize
+foreach chunk:
+    byte[] compressed = EclDecrypt(chunk_ct, aesKey, iv);
+    byte[] plaintext  = ZlibDecompress(compressed);
+    plaintext = plaintext[0 .. chunk.dsize];
+    output.Append(plaintext);
+  </pre></code>
+
+  <h4>Fallback password</h4>
+  <p>
+    If primary decryption (Mixer-derived password) fails, a hardcoded fallback
+    <code>"b67de657"</code> is attempted. This covers edge cases where files use a fixed
+    password rather than the Mixer-derived scheme.
+  </p>
+
+  <h4>Minimal file size</h4>
+  <p>
+    A valid <code>.fml</code> must be at least <strong>148 bytes</strong>:
+    <code>128</code> (header) + <code>16</code> (chunk 1 header) + <code>4</code> (last4).
+    This implies a minimum encrypted payload of at least 0 bytes (header-only chunk).
+  </p>
+</section>
+
+<!-- ================================================================== -->
+<section id="test-vectors">
+  <h2>9. Known Test Vectors</h2>
+
+  <h3>RIPEMD-128</h3>
+  <table>
+    <tr><th>Input</th><th>RIPEMD-128 Hash</th></tr>
+    <tr><td><code>""</code></td><td><code>cdf26213a150dc3ecb610f18f6b38b46</code></td></tr>
+    <tr><td><code>"a"</code></td><td><code>86be7afa339d0fc7cfc785e72f578d33</code></td></tr>
+    <tr><td><code>"abc"</code></td><td><code>c14a12199c66e4ba84636b0f69144c77</code></td></tr>
+    <tr><td><code>"01279247"</code></td><td><code>0e751ef3533305c26ac67b1a39204ac8</code></td></tr>
+    <tr><td><code>"0098ffef"</code></td><td><code>d1f6109144b92b6ec44e8c4829e5ea9e</code></td></tr>
+    <tr><td><code>"276c4849"</code></td><td><code>00fa20bde36860aa74c63dbc2bdd0b78</code></td></tr>
+    <tr><td><code>"5ac7da74"</code></td><td><code>1b248a40f86bdc69effbe9bc5865fe96</code></td></tr>
+  </table>
+
+  <h3>Mixer Round-Trip</h3>
+  <table>
+    <tr><th>Seed (last4)</th><th>Password (Mix output)</th></tr>
+    <tr><td><code>0x84EE4F7C</code></td><td><code>0x01279247</code></td></tr>
+    <tr><td><code>0x7EACD4E8</code></td><td><code>0x0098FFEF</code></td></tr>
+    <tr><td><code>0x25CEAB82</code></td><td><code>0x276C4849</code></td></tr>
+    <tr><td><code>0x847971D9</code></td><td><code>0x5AC7DA74</code></td></tr>
+  </table>
+
+  <h3>Sample Files</h3>
+  <table>
+    <tr><th>File</th><th>FML Size</th><th>Decoded Size</th><th>Compression Ratio</th></tr>
+    <tr><td><code>sample-1.fml</code></td><td>1,466 B</td><td>9,407 B</td><td>6.4×</td></tr>
+    <tr><td><code>sample-2.fml</code></td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td><code>sample-3.fml</code></td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td><code>sample-4.fml</code></td><td>—</td><td>—</td><td>—</td></tr>
+  </table>
+</section>
+
+</main>
+
+</body>
+</html>
