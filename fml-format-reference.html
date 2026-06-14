@@ -239,10 +239,50 @@
 </section>
 
 <!-- ================================================================== -->
-<section id="pipeline">
-  <h2>3. Decryption Pipeline (Step by Step)</h2>
+<section id="format-phases">
+  <h2>3. Format Phases (Phase 1 / Phase 2)</h2>
+  <p>
+    Two generations of <code>.fml</code> files exist, reflecting the
+    development history of the original features:
+  </p>
 
-  <h3>3.1 Step 1 — Extract <code>last4</code></h3>
+  <table>
+    <tr><th>Phase</th><th>Password</th><th>File Layout</th><th>Detection</th></tr>
+    <tr>
+      <td><strong>Phase 1</strong> (legacy)</td>
+      <td>Static key <code>b67de657</code></td>
+      <td>Ends at EOF &mdash; no trailing seed</td>
+      <td>Last chunk <code>next_header_offset == file_size</code></td>
+    </tr>
+    <tr>
+      <td><strong>Phase 2</strong> (current)</td>
+      <td>Seed-derived via Mixer</td>
+      <td>4-byte seed appended at EOF</td>
+      <td>Last chunk <code>next_header_offset == file_size - 4</code></td>
+    </tr>
+  </table>
+
+  <p>
+    The decoder walks the chunk header chain from offset 128, following each
+    chunk's <code>next_header_offset</code>, and compares the final value to
+    the file length to determine the phase automatically.
+  </p>
+</section>
+
+<!-- ================================================================== -->
+<section id="pipeline">
+  <h2>4. Decryption Pipeline (Step by Step)</h2>
+
+  <h3>4.1 Step 1 — Phase Detection</h3>
+  <p>
+    Walk the chunk header chain using <code>next_header_offset</code> to find
+    the last chunk's header. If <code>next_header_offset == file_size</code>,
+    the file is <strong>Phase 1</strong> (legacy, static password
+    <code>b67de657</code>). If <code>next_header_offset == file_size - 4</code>,
+    the file is <strong>Phase 2</strong> (4-byte seed present at EOF).
+  </p>
+
+  <h3>4.2 Step 2 — Extract <code>last4</code> (Phase 2 only)</h3>
   <p>
     Read the final 4 bytes of the <code>.fml</code> file and interpret as a little-endian <code>uint32</code>.
     This is the <strong>password seed</strong>.
@@ -376,7 +416,7 @@
 
 <!-- ================================================================== -->
 <section id="ecl-details">
-  <h2>4. ECL Mode — Detailed Algorithm</h2>
+  <h2>5. ECL Mode — Detailed Algorithm</h2>
 
   <h4>Pseudocode: Decrypt</h4>
   <pre><code>ECL_Decrypt(ciphertext, aesKey, iv):
@@ -438,7 +478,7 @@
 
 <!-- ================================================================== -->
 <section id="algorithms">
-  <h2>5. Cryptographic Primitives</h2>
+  <h2>6. Cryptographic Primitives</h2>
 
   <h3>5.1 AES-128-ECB</h3>
   <p>
@@ -472,7 +512,7 @@
 
 <!-- ================================================================== -->
 <section id="constants">
-  <h2>6. Hardcoded Constants</h2>
+  <h2>7. Hardcoded Constants</h2>
 
   <table>
     <tr><th>Constant</th><th>Value</th><th>Usage</th></tr>
@@ -487,7 +527,7 @@
 
 <!-- ================================================================== -->
 <section id="format-summary">
-  <h2>7. Visual Format Summary</h2>
+  <h2>8. Visual Format Summary</h2>
 
   <div class="diagram">
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -528,7 +568,7 @@
 
 <!-- ================================================================== -->
 <section id="implementation">
-  <h2>8. Implementation Notes</h2>
+  <h2>9. Implementation Notes</h2>
 
   <h4>Decryption flow in C#</h4>
   <pre><code>// 1. Read the .fml file
@@ -572,7 +612,7 @@ foreach chunk:
 
 <!-- ================================================================== -->
 <section id="test-vectors">
-  <h2>9. Known Test Vectors</h2>
+  <h2>10. Known Test Vectors</h2>
 
   <h3>RIPEMD-128</h3>
   <table>

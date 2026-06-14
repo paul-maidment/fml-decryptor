@@ -76,15 +76,29 @@ Each chunk header (16 bytes):
 All chunks use the same password-derived AES key and IV. Each chunk is
 decrypted independently (ECL mode resets per chunk).
 
+### Format Phases (Phase 1 / Phase 2)
+
+Two generations of `.fml` files exist, reflecting the development history when the encryption and compression was added.
+
+| Phase | Password | File layout | Detection |
+|-------|----------|-------------|-----------|
+| **Phase 1** (legacy) | Static key `b67de657` | Ends at EOF — no trailing seed | Last chunk `next_header_offset == file_size` |
+| **Phase 2** (current) | Seed-derived via Mixer | 4-byte seed appended at EOF | Last chunk `next_header_offset == file_size - 4` |
+
+The decoder automatically detects the password to use by walking the chunk header chain
+and comparing the final `next_header_offset` to the file length.
+
 ### Pipeline
 
-1. **Mixer** — 100 iterations on `last4` → 8-char hex password
-2. **RIPEMD-128** — hash password bytes → 16-byte AES key
-3. **IV** — `AES_ECB_encrypt(key, 16 × 0xFF)`
-4. **ECL decrypt** — custom feedback mode, AES-ECB (per chunk)
-5. **zlib decompress** (per chunk)
-6. **Trim** each chunk to its `dsize`
-7. **Concatenate** all chunk outputs
+1. **Phase detection** — Walk chunk headers to determine Phase 1 vs Phase 2
+2. **Mixer** — 100 iterations on `last4` → 8-char hex password (Phase 2 only)
+3. **RIPEMD-128** — hash password bytes → 16-byte AES key
+4. **IV** — `AES_ECB_encrypt(key, 16 × 0xFF)`
+5. **ECL decrypt** — custom feedback mode, AES-ECB (per chunk)
+6. **zlib decompress** (per chunk)
+7. **CRC32 verify** — compare against `chunk_crc32` in header, warn on mismatch
+8. **Trim** each chunk to its `dsize`
+9. **Concatenate** all chunk outputs
 
 ## Files
 

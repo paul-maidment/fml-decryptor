@@ -13,8 +13,7 @@ namespace FmlDecryptor
             if (fmlBytes == null || fmlBytes.Length < 148)
                 throw new ArgumentException("FML data too short");
 
-            uint last4 = BitConverter.ToUInt32(fmlBytes, fmlBytes.Length - 4);
-            string password = Mix(last4).ToString("x8");
+            string password = DerivePassword(fmlBytes);
 
             try
             {
@@ -24,6 +23,54 @@ namespace FmlDecryptor
             {
                 return DecryptAllChunks(fmlBytes, AltPassword);
             }
+        }
+
+        // Two file format phases exist:
+        //   Phase 1 (legacy): static password "b67de657", last chunk's next_header_offset == EOF (no seed)
+        //   Phase 2 (current): 4-byte seed at EOF, last chunk's next_header_offset == EOF - 4
+        // We detect the phase by walking the chunk header chain and comparing the final
+        // next_header_offset to the file length.
+        private static string DerivePassword(byte[] fmlBytes)
+        {
+            uint lastNextOff = FindLastNextHeaderOffset(fmlBytes);
+
+            if (lastNextOff == fmlBytes.Length)
+                return AltPassword;
+
+            if (lastNextOff == fmlBytes.Length - 4)
+            {
+                uint seed = BitConverter.ToUInt32(fmlBytes, fmlBytes.Length - 4);
+                return Mix(seed).ToString("x8");
+            }
+
+            uint last4 = BitConverter.ToUInt32(fmlBytes, fmlBytes.Length - 4);
+            return Mix(last4).ToString("x8");
+        }
+
+        // Walks the chunk header chain from offset 128, following each chunk's
+        // next_header_offset field, and returns the final chunk's next_header_offset.
+        private static uint FindLastNextHeaderOffset(byte[] fmlBytes)
+        {
+            int pos = 128;
+            uint lastNextOff = 0;
+            int maxChunks = 10000;
+
+            while (pos + 16 <= fmlBytes.Length && maxChunks-- > 0)
+            {
+                uint csize = BitConverter.ToUInt32(fmlBytes, pos);
+                uint nextOff = BitConverter.ToUInt32(fmlBytes, pos + 12);
+                lastNextOff = nextOff;
+
+                if (nextOff >= fmlBytes.Length || nextOff <= pos)
+                    break;
+
+                if (nextOff + 16 > fmlBytes.Length)
+                    break;
+
+                pos = (int)nextOff;
+            }
+
+            return lastNextOff;
         }
 
         public static byte[] DecryptWithPassword(byte[] fmlBytes, uint csize, uint dsize, string password)
