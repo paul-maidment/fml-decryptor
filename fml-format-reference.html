@@ -197,7 +197,8 @@
 0x00            128     Header &amp; metadata (mostly unused / padding)
 0x80              4     <span class="hl">csize</span> — compressed/encrypted data size (uint32 LE)
 0x84              4     <span class="hl">dsize</span> — decompressed data size (uint32 LE)
-0x88              8     Unknown / reserved (8 bytes)
+0x88              4     Unknown (possibly CRC32 / validation)
+0x8C              4     <span class="hl">next_header_offset</span> — points to next chunk header (or last4 seed)
 0x90            csize   Encrypted zlib payload
 -4                4     <span class="hl2">last4</span> — password seed (uint32 LE)
   </div>
@@ -215,11 +216,13 @@
 0x00            128     File header
 0x80              4     Chunk 1 — csize
 0x84              4     Chunk 1 — dsize
-0x88              8     Chunk 1 — unknown
+0x88              4     Chunk 1 — unknown (possibly CRC32)
+0x8C              4     Chunk 1 — next_header_offset
 0x90           csize₁   Chunk 1 — encrypted zlib payload
 +csize₁           4     Chunk 2 — csize
 +4                4     Chunk 2 — dsize
-+8                8     Chunk 2 — unknown
++8                4     Chunk 2 — unknown (possibly CRC32)
++12               4     Chunk 2 — next_header_offset
 +16            csize₂   Chunk 2 — encrypted zlib payload
   ...            ...    ...
 -4                4     <span class="hl2">last4</span> — password seed
@@ -230,7 +233,8 @@
     <tr><th>Offset</th><th>Size</th><th>Field</th><th>Type</th></tr>
     <tr><td>+0</td><td>4</td><td><code>csize</code></td><td>uint32 LE — size of encrypted data in this chunk</td></tr>
     <tr><td>+4</td><td>4</td><td><code>dsize</code></td><td>uint32 LE — size after zlib decompression</td></tr>
-    <tr><td>+8</td><td>8</td><td>unknown</td><td>8 reserved bytes</td></tr>
+    <tr><td>+8</td><td>4</td><td>unknown</td><td>uint32 LE — possibly CRC32 / validation</td></tr>
+    <tr><td>+12</td><td>4</td><td><code>next_header_offset</code></td><td>uint32 LE — file offset of next chunk header</td></tr>
   </table>
 </section>
 
@@ -495,7 +499,7 @@
 │  ├──────────────────────────────┤                                    │
 │  │ csize (4B) │ dsize (4B)     │  ─┐                                │
 │  ├────────────┴─────────────────┤   │                                │
-│  │ unknown (8 bytes)            │   ├─ Chunk 1 header (16 bytes)    │
+│  │ unknown (4B) | next_off (4B)   │   ├─ Chunk 1 header (16 bytes)    │
 │  ├──────────────────────────────┤   │                                │
 │  │                              │  ─┘                                │
 │  │ Encrypted zlib payload      │  csize bytes                       │
@@ -504,7 +508,7 @@
 │  ├──────────────────────────────┤  ─┐                                │
 │  │ csize (4B) │ dsize (4B)     │   │  (if multi-chunk)              │
 │  ├────────────┴─────────────────┤   ├─ Chunk 2 header               │
-│  │ unknown (8 bytes)           │   │                                │
+│  │ unknown (4B) | next_off (4B)  │   │                                │
 │  ├──────────────────────────────┤  ─┘                                │
 │  │                              │                                    │
 │  │ Encrypted zlib payload      │  csize bytes                       │

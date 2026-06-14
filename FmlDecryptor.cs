@@ -57,6 +57,8 @@ namespace FmlDecryptor
             {
                 uint csize = BitConverter.ToUInt32(fmlBytes, 128);
                 uint dsize = BitConverter.ToUInt32(fmlBytes, 132);
+                uint unknown = BitConverter.ToUInt32(fmlBytes, 136);
+                uint nextHeaderOffset = BitConverter.ToUInt32(fmlBytes, 140);
                 int position = 144;
 
                 while (position < fmlBytes.Length - 4)
@@ -78,6 +80,8 @@ namespace FmlDecryptor
 
                     csize = BitConverter.ToUInt32(fmlBytes, position);
                     dsize = BitConverter.ToUInt32(fmlBytes, position + 4);
+                    unknown = BitConverter.ToUInt32(fmlBytes, position + 8);
+                    nextHeaderOffset = BitConverter.ToUInt32(fmlBytes, position + 12);
                     position += 16;
                 }
 
