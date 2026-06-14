@@ -113,6 +113,36 @@ public class FmlDecryptorTests
     }
 
     [Fact]
+    public void Decode_MultiChunkSample1()
+    {
+        DecodeAndVerify("multi_chunk_sample_1");
+    }
+
+    [Fact]
+    public void Decode_MultiChunkSample2()
+    {
+        DecodeAndVerify("multi_chunk_sample_2");
+    }
+
+    [Fact]
+    public void Decode_MultiChunkSample3()
+    {
+        DecodeAndVerify("multi_chunk_sample_3");
+    }
+
+    [Fact]
+    public void ComputeChunkCrc32_KnownVector_1()
+    {
+        Assert.Equal(0xF34ACF20u, Dec.ComputeChunkCrc32(GetDecoded("sample-1")));
+    }
+
+    [Fact]
+    public void ComputeChunkCrc32_KnownVector_2()
+    {
+        Assert.Equal(0x5443415Du, Dec.ComputeChunkCrc32(GetDecoded("sample-2")));
+    }
+
+    [Fact]
     public void ECL_Decrypt_ExactBlock()
     {
         byte[] key = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
@@ -190,14 +220,19 @@ public class FmlDecryptorTests
 
     private static void DecodeAndVerify(int sampleNum)
     {
+        DecodeAndVerify($"sample-{sampleNum}");
+    }
+
+    private static void DecodeAndVerify(string sampleName)
+    {
         string root = Path.Combine(
             AppContext.BaseDirectory,
             "..", "..", "..", "..", "SampleFiles");
         if (!Directory.Exists(root))
             root = Path.Combine(AppContext.BaseDirectory, "SampleFiles");
 
-        string fmlPath = Path.Combine(root, $"sample-{sampleNum}.fml");
-        string expectedPath = Path.Combine(root, $"sample-{sampleNum}_decoded.dat");
+        string fmlPath = Path.Combine(root, $"{sampleName}.fml");
+        string expectedPath = Path.Combine(root, $"{sampleName}_decoded.dat");
 
         byte[] actual = Dec.Decrypt(File.ReadAllBytes(fmlPath));
         byte[] expected = File.ReadAllBytes(expectedPath);
@@ -206,6 +241,18 @@ public class FmlDecryptorTests
         for (int i = 0; i < expected.Length; i++)
             if (expected[i] != actual[i])
                 Assert.Fail($"Byte mismatch at offset {i}: expected 0x{expected[i]:X2}, got 0x{actual[i]:X2}");
+    }
+
+    private static byte[] GetDecoded(string sampleName)
+    {
+        string root = Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "SampleFiles");
+        if (!Directory.Exists(root))
+            root = Path.Combine(AppContext.BaseDirectory, "SampleFiles");
+
+        string fmlPath = Path.Combine(root, $"{sampleName}.fml");
+        return Dec.Decrypt(File.ReadAllBytes(fmlPath));
     }
 
     private static string ToHex(byte[] bytes)

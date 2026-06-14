@@ -31,8 +31,8 @@ VERIFIED: Output matches known-good decoded file
 dotnet test FmlDecryptor.Tests
 ```
 
-17 tests covering RIPEMD-128 vectors, Mixer vectors, ECL mode round-trips,
-and byte-exact decode of all 4 sample files.
+22 tests covering RIPEMD-128 vectors, Mixer vectors, ECL mode round-trips,
+chunk CRC32 computation, single-chunk sample files, and multi-chunk sample files.
 
 ## File Format
 
