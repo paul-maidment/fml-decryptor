@@ -16,11 +16,11 @@ namespace FmlDecryptor
             BitConverter.TryWriteBytes(new Span<byte>(padded, totalLen - 8, 8), ml);
 
             uint h0 = IV[0], h1 = IV[1], h2 = IV[2], h3 = IV[3];
+            Span<uint> X = stackalloc uint[16];
 
             for (int i = 0; i < totalLen; i += 64)
             {
                 Span<byte> block = new Span<byte>(padded, i, 64);
-                Span<uint> X = stackalloc uint[16];
                 for (int k = 0; k < 16; k++)
                     X[k] = BitConverter.ToUInt32(block.Slice(k * 4, 4));
 
