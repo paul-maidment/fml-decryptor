@@ -7,7 +7,8 @@
 #   Windows:  Visual Studio 2022 with "Desktop development with C++"
 #             For win-arm64 also install "C++ ARM64 build tools"
 #   Linux:    clang, zlib development headers (e.g. apt install clang zlib1g-dev)
-#             For linux-arm64 on an x64 host: clang, llvm, binutils, gcc-aarch64-linux-gnu
+#             For linux-arm64, prefer a native arm64 host (e.g. ubuntu-24.04-arm in CI)
+#             rather than cross-compiling from x64; see https://aka.ms/nativeaot-cross-compile
 #   macOS:    Xcode command-line tools
 #
 # Native AOT cannot cross-compile across operating systems. Build each OS on

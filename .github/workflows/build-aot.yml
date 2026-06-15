@@ -37,8 +37,16 @@ jobs:
           if-no-files-found: error
 
   build-linux:
-    name: Linux (linux-x64, linux-arm64)
-    runs-on: ubuntu-latest
+    name: Linux (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-latest
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,20 +57,16 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Install Native AOT toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang zlib1g-dev llvm binutils gcc-aarch64-linux-gnu
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
       - name: Publish Native AOT
-        run: bash ./scripts/build-aot.sh --clean linux-x64 linux-arm64
+        run: bash ./scripts/build-aot.sh --clean ${{ matrix.rid }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: fmldecryptor-aot-linux
-          path: |
-            dist/aot/linux-x64/FmlDecryptor
-            dist/aot/linux-arm64/FmlDecryptor
+          name: fmldecryptor-aot-${{ matrix.rid }}
+          path: dist/aot/${{ matrix.rid }}/FmlDecryptor
           if-no-files-found: error
 
   build-macos:
