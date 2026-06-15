@@ -8,8 +8,17 @@
     <Nullable>disable</Nullable>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <StripSymbols>true</StripSymbols>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <IlcOptimizationPreference>Size</IlcOptimizationPreference>
+  </PropertyGroup>
+
   <ItemGroup>
-    <Content Include="SampleFiles\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="SampleFiles\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
     <Compile Remove="FmlDecryptor.Tests\**" />
   </ItemGroup>
 

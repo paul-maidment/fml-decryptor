@@ -1,0 +1,90 @@
+name: Build AOT
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Windows (win-x64, win-arm64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish Native AOT
+        shell: pwsh
+        run: ./scripts/build-aot.ps1 -Target win-x64,win-arm64 -Clean
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmldecryptor-aot-windows
+          path: |
+            dist/aot/win-x64/FmlDecryptor.exe
+            dist/aot/win-arm64/FmlDecryptor.exe
+          if-no-files-found: error
+
+  build-linux:
+    name: Linux (linux-x64, linux-arm64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install Native AOT toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang zlib1g-dev llvm binutils gcc-aarch64-linux-gnu
+
+      - name: Publish Native AOT
+        run: bash ./scripts/build-aot.sh --clean linux-x64 linux-arm64
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmldecryptor-aot-linux
+          path: |
+            dist/aot/linux-x64/FmlDecryptor
+            dist/aot/linux-arm64/FmlDecryptor
+          if-no-files-found: error
+
+  build-macos:
+    name: macOS (osx-x64, osx-arm64)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish Native AOT
+        run: bash ./scripts/build-aot.sh --clean osx-x64 osx-arm64
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmldecryptor-aot-macos
+          path: |
+            dist/aot/osx-x64/FmlDecryptor
+            dist/aot/osx-arm64/FmlDecryptor
+          if-no-files-found: error
