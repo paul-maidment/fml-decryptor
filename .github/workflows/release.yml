@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. v1.0.0)
+        required: true
+        type: string
+      run_id:
+        description: Build AOT workflow run ID to promote (from the Actions run URL)
+        required: true
+        type: string
+      draft:
+        description: Create as draft release
+        required: false
+        type: boolean
+        default: false
+      prerelease:
+        description: Mark as prerelease
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    name: Publish release ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate promoted build
+        id: build
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runId = Number('${{ inputs.run_id }}');
+            if (!Number.isInteger(runId) || runId <= 0) {
+              core.setFailed(`Invalid run_id: ${{ inputs.run_id }}`);
+              return;
+            }
+
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });
+
+            if (run.name !== 'Build AOT') {
+              core.setFailed(`Run ${runId} is "${run.name}", expected "Build AOT".`);
+              return;
+            }
+
+            if (run.conclusion !== 'success') {
+              core.setFailed(`Run ${runId} did not succeed (status: ${run.status}, conclusion: ${run.conclusion}).`);
+              return;
+            }
+
+            core.setOutput('sha', run.head_sha);
+            core.setOutput('html_url', run.html_url);
+            core.info(`Promoting successful Build AOT run ${runId} at ${run.head_sha}`);
+
+      - name: Download Windows artifacts
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          run_id: ${{ inputs.run_id }}
+          workflow: build-aot.yml
+          name: fmldecryptor-aot-windows
+          path: artifacts/windows
+          if_no_artifact_found: fail
+
+      - name: Download Linux x64 artifacts
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          run_id: ${{ inputs.run_id }}
+          workflow: build-aot.yml
+          name: fmldecryptor-aot-linux-x64
+          path: artifacts/linux-x64
+          if_no_artifact_found: fail
+
+      - name: Download Linux arm64 artifacts
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          run_id: ${{ inputs.run_id }}
+          workflow: build-aot.yml
+          name: fmldecryptor-aot-linux-arm64
+          path: artifacts/linux-arm64
+          if_no_artifact_found: fail
+
+      - name: Download macOS artifacts
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          run_id: ${{ inputs.run_id }}
+          workflow: build-aot.yml
+          name: fmldecryptor-aot-macos
+          path: artifacts/macos
+          if_no_artifact_found: fail
+
+      - name: Prepare release assets
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag }}"
+
+          if [[ ! "$TAG" =~ ^v[0-9] ]]; then
+            echo "Tag should look like v1.0.0 (got: $TAG)" >&2
+            exit 1
+          fi
+
+          mkdir -p release
+
+          copy_asset() {
+            local search_dir="$1"
+            local path_pattern="$2"
+            local out_name="$3"
+            local found
+
+            found="$(find "$search_dir" -type f -path "$path_pattern" | head -n1)"
+            if [[ -z "$found" ]]; then
+              echo "Missing asset matching $path_pattern under $search_dir" >&2
+              find "$search_dir" -type f | sort || true
+              exit 1
+            fi
+
+            cp "$found" "release/$out_name"
+            echo "  $out_name <= $found"
+          }
+
+          copy_asset artifacts/windows    '*win-x64*/FmlDecryptor.exe'   "FmlDecryptor-${TAG}-win-x64.exe"
+          copy_asset artifacts/windows    '*win-arm64*/FmlDecryptor.exe' "FmlDecryptor-${TAG}-win-arm64.exe"
+          copy_asset artifacts/linux-x64  '*linux-x64*/FmlDecryptor'     "FmlDecryptor-${TAG}-linux-x64"
+          copy_asset artifacts/linux-arm64 '*linux-arm64*/FmlDecryptor' "FmlDecryptor-${TAG}-linux-arm64"
+          copy_asset artifacts/macos      '*osx-x64*/FmlDecryptor'       "FmlDecryptor-${TAG}-osx-x64"
+          copy_asset artifacts/macos      '*osx-arm64*/FmlDecryptor'     "FmlDecryptor-${TAG}-osx-arm64"
+
+          chmod +x release/FmlDecryptor-${TAG}-linux-* release/FmlDecryptor-${TAG}-osx-*
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: FmlDecryptor ${{ inputs.tag }}
+          target_commitish: ${{ steps.build.outputs.sha }}
+          draft: ${{ inputs.draft }}
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: true
+          body: |
+            Native AOT binaries promoted from [Build AOT run ${{ inputs.run_id }}](${{ steps.build.outputs.html_url }}).
+
+            | Platform | Asset |
+            | --- | --- |
+            | Windows x64 | `FmlDecryptor-${{ inputs.tag }}-win-x64.exe` |
+            | Windows arm64 | `FmlDecryptor-${{ inputs.tag }}-win-arm64.exe` |
+            | Linux x64 | `FmlDecryptor-${{ inputs.tag }}-linux-x64` |
+            | Linux arm64 | `FmlDecryptor-${{ inputs.tag }}-linux-arm64` |
+            | macOS x64 | `FmlDecryptor-${{ inputs.tag }}-osx-x64` |
+            | macOS arm64 | `FmlDecryptor-${{ inputs.tag }}-osx-arm64` |
+          files: |
+            release/FmlDecryptor-${{ inputs.tag }}-win-x64.exe
+            release/FmlDecryptor-${{ inputs.tag }}-win-arm64.exe
+            release/FmlDecryptor-${{ inputs.tag }}-linux-x64
+            release/FmlDecryptor-${{ inputs.tag }}-linux-arm64
+            release/FmlDecryptor-${{ inputs.tag }}-osx-x64
+            release/FmlDecryptor-${{ inputs.tag }}-osx-arm64
