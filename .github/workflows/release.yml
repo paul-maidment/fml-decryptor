@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Validate promoted build
         id: build
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const runId = Number('${{ inputs.run_id }}');
