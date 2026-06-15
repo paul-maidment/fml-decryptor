@@ -188,13 +188,23 @@
 <section id="file-structure">
   <h2>2. File Structure</h2>
 
-  <h3>2.1 Single-Chunk Files</h3>
+  <h3>2.1 File Header (128 bytes)</h3>
+  <table>
+    <tr><th>Offset</th><th>Size</th><th>Field</th><th>Description</th></tr>
+    <tr><td>0x00</td><td>4</td><td>magic</td><td><code>"AACS"</code> — file signature</td></tr>
+    <tr><td>0x04</td><td>8</td><td>flags</td><td>Fixed values: <code>0x00000800</code>, <code>0xC141F43F</code></td></tr>
+    <tr><td>0x0C</td><td>4</td><td>chunk_count</td><td>Number of chunks in the file (uint32 LE)</td></tr>
+    <tr><td>0x10</td><td>12</td><td>fixed</td><td>Fixed pattern: <code>0x3F8F5C29 0x00010002 0x00000000</code></td></tr>
+    <tr><td>0x1C</td><td>100</td><td>integrity</td><td>ECL-encrypted counter (<code>0x00..0x63</code>) — validates file integrity on load. <strong>Required for MFME compatibility.</strong></td></tr>
+  </table>
+
+  <h3>2.2 Single-Chunk Files</h3>
   <p>Smaller <code>.fml</code> files contain exactly one payload chunk.</p>
 
   <div class="diagram">
 <span class="hl2">Offset</span>        <span class="hl3">Size</span>   <span class="hl">Description</span>
 ─────────────────────────────────────────────────────────
-0x00            128     Header &amp; metadata (mostly unused / padding)
+0x00            128     File header (see above)
 0x80              4     <span class="hl">csize</span> — compressed/encrypted data size (uint32 LE)
 0x84              4     <span class="hl">dsize</span> — decompressed data size (uint32 LE)
 0x88              4     <span class="hl">chunk_crc32</span> — CRC32 of decompressed chunk (init=0, no final XOR)
@@ -203,7 +213,7 @@
 -4                4     <span class="hl2">last4</span> — password seed (uint32 LE)
   </div>
 
-  <h3>2.2 Multi-Chunk Files</h3>
+  <h3>2.3 Multi-Chunk Files</h3>
   <p>
     Larger files are split into multiple independently-encrypted chunks.
     Each chunk has its own 16-byte header and encrypted payload.
@@ -213,7 +223,7 @@
   <div class="diagram">
 <span class="hl2">Offset</span>        <span class="hl3">Size</span>   <span class="hl">Description</span>
 ─────────────────────────────────────────────────────────
-0x00            128     File header
+0x00            128     File header (see above)
 0x80              4     Chunk 1 — csize
 0x84              4     Chunk 1 — dsize
 0x88              4     Chunk 1 — chunk_crc32 (CRC32 of decompressed chunk)
@@ -535,7 +545,11 @@
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  ┌──────────────────────────────┐                                    │
-│  │   Header (128 bytes)         │  Mostly unused / padding           │
+│  │ "AACS" + flags (12B)        │                                    │
+│  │ chunk_count (4B)            │  File header (128 bytes)           │
+│  │ fixed pattern (12B)         │                                    │
+│  │ ECL-encrypted counter       │  ─── integrity check (100 bytes)   │
+│  │ (0x00 .. 0x63)              │                                    │
 │  ├──────────────────────────────┤                                    │
 │  │ csize (4B) │ dsize (4B)     │  ─┐                                │
 │  ├────────────┴─────────────────┤   │                                │

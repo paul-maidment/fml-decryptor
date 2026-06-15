@@ -157,6 +157,19 @@ namespace FmlDecryptor
             return result;
         }
 
+        public static uint MixInverse(uint password)
+        {
+            uint result = password;
+            const uint addr = 0x00C59A00;
+            for (int i = 0; i < 100; i++)
+            {
+                uint v4 = (result >> 3) | (result << 29);
+                uint v = (v4 >> 24) | (v4 << 24) | (v4 & 0x00FFFF00);
+                result = addr ^ v;
+            }
+            return result;
+        }
+
         private static byte[] EncryptEcb(byte[] key, byte[] plaintext)
         {
             using (Aes aes = Aes.Create())
@@ -253,7 +266,142 @@ namespace FmlDecryptor
             return crc;
         }
 
+        public static byte[] EclEncrypt(byte[] plaintext, byte[] key, byte[] iv)
+        {
+            byte[] fb_d = new byte[16];
+            byte[] fb_b = new byte[16];
+            Array.Copy(iv, fb_d, 16);
+
+            int fullBlocks = plaintext.Length - (plaintext.Length % 16);
+            byte[] result = new byte[fullBlocks + (plaintext.Length % 16)];
+            int resultPos = 0;
+
+            using (Aes aes = Aes.Create())
+            {
+                aes.Mode = CipherMode.ECB;
+                aes.Padding = PaddingMode.None;
+                aes.Key = key;
+
+                using (ICryptoTransform encryptor = aes.CreateEncryptor())
+                {
+                    byte[] block = new byte[16];
+                    for (int i = 0; i < fullBlocks; i += 16)
+                    {
+                        for (int j = 0; j < 16; j++)
+                            block[j] = (byte)(plaintext[i + j] ^ fb_d[j]);
+
+                        byte[] ct = new byte[16];
+                        encryptor.TransformBlock(block, 0, 16, ct, 0);
+
+                        for (int j = 0; j < 16; j++)
+                            result[resultPos++] = ct[j];
+
+                        for (int j = 0; j < 16; j++)
+                            fb_b[j] = (byte)(ct[j] ^ fb_d[j]);
+
+                        byte[] tmp = fb_d;
+                        fb_d = fb_b;
+                        fb_b = tmp;
+                    }
+
+                    int rem = plaintext.Length % 16;
+                    if (rem > 0)
+                    {
+                        byte[] keystream = new byte[16];
+                        encryptor.TransformBlock(fb_d, 0, 16, keystream, 0);
+                        for (int j = 0; j < rem; j++)
+                            result[resultPos++] = (byte)(plaintext[fullBlocks + j] ^ keystream[j]);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        public static byte[] Encode(byte[] plaintext, string password, int chunkSize = 524288, bool phase1 = false)
+        {
+            if (plaintext == null || plaintext.Length == 0)
+                throw new ArgumentException("Plaintext is null or empty");
+
+            if (password.Length != 8)
+                throw new ArgumentException("Password must be an 8-character hex string (e.g. \"01279247\")");
+
+            uint passwordVal = uint.Parse(password, System.Globalization.NumberStyles.HexNumber);
+            uint seed = MixInverse(passwordVal);
+
+            byte[] aesKey = Ripemd128.ComputeHash(Encoding.ASCII.GetBytes(password));
+            byte[] iv = EncryptEcb(aesKey, s_allFfBlock);
+
+            using (MemoryStream output = new MemoryStream())
+            {
+                int totalChunks = (plaintext.Length + chunkSize - 1) / chunkSize;
+
+                output.Write(s_fileHeaderPrefix, 0, 12);
+                output.Write(BitConverter.GetBytes((uint)totalChunks), 0, 4);
+                output.Write(s_fileHeaderPrefix, 16, 12);
+
+                byte[] counter = new byte[100];
+                for (int i = 0; i < 100; i++)
+                    counter[i] = (byte)i;
+                byte[] encryptedCounter = EclEncrypt(counter, aesKey, iv);
+                output.Write(encryptedCounter, 0, 100);
+
+                int offset = 0;
+
+                for (int chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++)
+                {
+                    int thisChunkSize = Math.Min(chunkSize, plaintext.Length - offset);
+                    byte[] chunkPlain = new byte[thisChunkSize];
+                    Array.Copy(plaintext, offset, chunkPlain, 0, thisChunkSize);
+
+                    uint crc32 = ComputeChunkCrc32(chunkPlain);
+                    byte[] compressed = ZlibCompress(chunkPlain);
+                    byte[] encrypted = EclEncrypt(compressed, aesKey, iv);
+
+                    int headerStart = 128;
+                    if (chunkIndex > 0)
+                        headerStart = (int)output.Length;
+
+                    output.Write(BitConverter.GetBytes((uint)encrypted.Length), 0, 4);
+                    output.Write(BitConverter.GetBytes((uint)thisChunkSize), 0, 4);
+                    output.Write(BitConverter.GetBytes(crc32), 0, 4);
+
+                    uint nextOff = (uint)(output.Length + 4 + encrypted.Length);
+                    output.Write(BitConverter.GetBytes(nextOff), 0, 4);
+
+                    output.Write(encrypted, 0, encrypted.Length);
+
+                    offset += thisChunkSize;
+                }
+
+                if (!phase1)
+                    output.Write(BitConverter.GetBytes(seed), 0, 4);
+
+                return output.ToArray();
+            }
+        }
+
+        private static byte[] ZlibCompress(byte[] data)
+        {
+            using (MemoryStream output = new MemoryStream())
+            {
+                using (ZLibStream zlib = new ZLibStream(output, CompressionMode.Compress, true))
+                {
+                    zlib.Write(data, 0, data.Length);
+                }
+                return output.ToArray();
+            }
+        }
+
         private const string AltPassword = "b67de657";
+
+        private static readonly byte[] s_fileHeaderPrefix = new byte[28]
+        {
+            0x41, 0x41, 0x43, 0x53, 0x00, 0x00, 0x08, 0x00,
+            0x3F, 0xF4, 0x41, 0xC1, 0x01, 0x00, 0x00, 0x00,
+            0x29, 0x5C, 0x8F, 0x3F, 0x02, 0x00, 0x01, 0x00,
+            0x00, 0x00, 0x00, 0x00
+        };
 
         private static readonly byte[] s_allFfBlock = new byte[16]
         {

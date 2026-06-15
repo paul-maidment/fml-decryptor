@@ -25,6 +25,18 @@ Output: SampleFiles\sample-1_decoded.dat
 VERIFIED: Output matches known-good decoded file
 ```
 
+### Encoding
+
+```
+dotnet run -- --encode input.dat [output.fml] [--password hex] [--chunk-size N] [--phase1]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--password` | 8-char hex password (default: random) |
+| `--chunk-size` | Chunk size in bytes (default: 524288) |
+| `--phase1` | Produce legacy Phase 1 file (no seed, static key `b67de657`) |
+
 ## Test
 
 ```
@@ -36,10 +48,23 @@ chunk CRC32 computation, single-chunk sample files, and multi-chunk sample files
 
 ## File Format
 
+### File Header (128 bytes)
+
+```
+[0..3]      Magic "AACS"
+[4..7]      Flags (0x00000800)
+[8..11]     Flags (0xC141F43F)
+[12..15]    Chunk count (uint32 LE)
+[16..27]    Fixed pattern (0x3F8F5C29 0x00010002 0x00000000)
+[28..127]   Integrity check — 100 bytes of ECL-encrypted counter (0x00..0x63)
+            Encrypted with the same AES key and ECL mode as the chunks.
+            On load, decrypt and verify bytes equal 0,1,2,...,99.
+            Required for MFME compatibility.
+```
+
 ### Single-chunk files (smaller .fml)
 
 ```
-[0..127]     header fields
 [128..131]   csize (compressed/encrypted size)
 [132..135]   dsize (decompressed size)
 [136..139]   chunk_crc32 (CRC32 of decompressed chunk data, init=0, no final XOR)
