@@ -6,9 +6,6 @@
     <LangVersion>10</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
     <StripSymbols>true</StripSymbols>
