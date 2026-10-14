@@ -12,6 +12,8 @@
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
     <IlcOptimizationPreference>Size</IlcOptimizationPreference>
+    <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
+    <Copyright>Copyright (C) 2026 Paul Maidment</Copyright>
   </PropertyGroup>
 
   <ItemGroup>

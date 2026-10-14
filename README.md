@@ -134,3 +134,10 @@ and comparing the final `next_header_offset` to the file length.
 | `Program.cs` | CLI entry point |
 | `SampleFiles/` | Test .fml files + expected .dat outputs |
 | `FmlDecryptor.Tests/` | xUnit test project |
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 or later
+(AGPL-3.0-or-later). See [LICENSE](LICENSE) for the full text.
+
+Copyright (C) 2026 Paul Maidment.
