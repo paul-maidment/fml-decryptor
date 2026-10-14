@@ -2,6 +2,10 @@
 
 Pure C# decoder for `.fml` files. No external dependencies beyond .NET 8.
 
+> **A TypeScript port of this project also exists:** see
+> [fml-decryptor-ts](https://github.com/paul-maidment/fml-decryptor-ts).
+> This C# implementation remains the reference implementation.
+
 ## Build
 
 ```
